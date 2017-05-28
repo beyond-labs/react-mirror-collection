@@ -22,7 +22,7 @@ Each collection entry stores 3 pieces of information:
 
 * `key` - Generated & set by Mirror Collection. Links entries returned by `TRANSFORM` to previous entries. Can be passed to React components (inside arrays) for reconciliation.
 * `value` - Last value emitted by scanning update actions. Update actions are dispatched whenever a linked store emits a `$state` value or a value is modified via `TRANSFORM`.
-* `id` - An implicitly-stored address for retrieving key / value pairs (eg, an array index). Ids link `$state` events to entries when passed as a prop to target stores.
+* `id` - An implicitly-stored address for retrieving key / value pairs (eg, an array index). Links `$state` events from target stores to entries (`$state` events from target stores should contain an `id` property).
 
 ## Example
 
@@ -84,9 +84,6 @@ const Todos = Mirror({
     const $state = mirror.$actions
       .tap(
         handleActions({
-          INITIALIZE: () => {
-            dispatch.one('COLLECTION/todos')('TRANSFORM', () => [])
-          },
           ADD_TODO: ({payload: value}) => {
             dispatch.one('COLLECTION/todos')('TRANSFORM', arr => {
               return arr.concat({value, complete: false})
@@ -114,7 +111,8 @@ const Todos = Mirror({
   <div>
     <CollectionController
       name="COLLECTION/todos"
-      for={mirror => mirror.parent().children('todo-item').$state}
+      empty={() => []}
+      target={mirror => mirror.parent().children('todo-item').$state}
     />
     <input
       onKeyDown={evt => {
@@ -146,11 +144,57 @@ const Todos = Mirror({
 
 ## Props
 
-for={mirror => mirror.parent().child('my-list-item').$state}
-getIds={collection => Object.keys(collection)}
-getValue={(collection, id) => collection[id].value}
-getKey={(collection, id) => collection[id].key}
-setKey={(collection, id, key) => collection[id].key = key}
-changed={(previous, current) => previous !== current}
-// payload omits `id`
-reducer={(previous, {type = 'STATE' || 'TRANSFORM', payload}) => payload}
+Changing any of the props passed to `CollectionController` once it's mounted has no effect.
+
+#### `target`
+
+Function which accepts a `mirror` cursor & returns a state stream matching every target store.
+
+#### `empty`
+
+Function which returns a collection with no entries.
+
+#### `getIds`
+
+Default value: `collection => Object.keys(collection)`
+
+#### `getValue`
+
+Default value: `(collection, id) => collection[id] && collection[id].value`
+
+#### `getKey`
+
+Default value: `(collection, id) => collection[id] && collection[id].key`
+
+#### `setValue`
+
+Default value: `(collection, id, value) => Object.assign({}, collection[id], {value})`
+
+#### `setKey`
+
+Default value: `(collection, id, key) => Object.assign({}, collection[id], {key})`
+
+#### `changed`
+
+After a `TRANSFORM` action Mirror Collection checks every value for changes & then updates modified entries.
+
+Default value: `(previous, current) => previous !== current`
+
+#### `reducer`
+
+Returns the "true" value of an entry whenever one is updated. `type` is either `"STATE_CHANGE"` or `"TRANSFORM"`
+
+Default value: `(previous, {type, payload}) => payload`
+
+#### `cloneOn`
+
+Controls collection cloning behaviour. Cloning the collection means that:
+
+* `TRANSFORM` actions won't mutate the collection
+* References to `collection` are safe
+* Pure components depending on the collection re-render when it changes
+* In extreme cases, performance could degrade
+
+Default value: `{transform: true, stateChange: true}`
+
+Note: you can dispatch `CLONE` to manually trigger collection cloning.
