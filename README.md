@@ -22,7 +22,7 @@ Each collection entry stores 3 pieces of information:
 
 * `key` - Generated & set by Mirror Collection. Links entries returned by `TRANSFORM` to previous entries. Can be passed to React components (inside arrays) for reconciliation.
 * `value` - Last value emitted by scanning update actions. Update actions are dispatched whenever a linked store emits a `$state` value or a value is modified via `TRANSFORM`.
-* `id` - An implicitly-stored address for retrieving key / value pairs (eg, an array index). Links `$state` events from target stores to entries (`$state` events from target stores should contain an `id` property).
+* `id` - An implicitly-stored address for retrieving key / value pairs (eg, an array index). Links `$state` events to entries when passed as a prop (`id`) to target stores.
 
 ## Example
 
@@ -86,7 +86,7 @@ const Todos = Mirror({
         handleActions({
           ADD_TODO: ({payload: value}) => {
             dispatch.one('COLLECTION/todos')('TRANSFORM', arr => {
-              return arr.concat({value, complete: false})
+              return arr.concat({value: {value, complete: false}})
             })
           }
         })
@@ -110,7 +110,7 @@ const Todos = Mirror({
 })(({collection, filter, input, dispatch}) => (
   <div>
     <CollectionController
-      name="COLLECTION/todos"
+      withName="COLLECTION/todos"
       empty={() => []}
       target={mirror => mirror.parent().children('todo-item').$state}
     />
@@ -135,9 +135,11 @@ const Todos = Mirror({
       .map(({value, key}, index) => {
         return <TodoItem {...value} key={key} id={index} />
       })}
-    <button onClick={() => dispatch('SET_FILTER', 'ALL')}>All</button>
-    <button onClick={() => dispatch('SET_FILTER', 'ACTIVE')}>Active</button>
-    <button onClick={() => dispatch('SET_FILTER', 'COMPLETE')}>Complete</button>
+    <div>
+      <button onClick={() => dispatch('SET_FILTER', 'ALL')}>All</button>
+      <button onClick={() => dispatch('SET_FILTER', 'ACTIVE')}>Active</button>
+      <button onClick={() => dispatch('SET_FILTER', 'COMPLETE')}>Complete</button>
+    </div>
   </div>
 ))
 ```
@@ -168,11 +170,25 @@ Default value: `(collection, id) => collection[id] && collection[id].key`
 
 #### `setValue`
 
-Default value: `(collection, id, value) => Object.assign({}, collection[id], {value})`
+Default value:
+
+```js
+(collection, id, value) => {
+  if (!collection[id]) collection[id] = {}
+  collection[id].value = value
+}
+```
 
 #### `setKey`
 
-Default value: `(collection, id, key) => Object.assign({}, collection[id], {key})`
+Default value:
+
+```js
+(collection, id, key) => {
+  if (!collection[id]) collection[id] = {}
+  collection[id].key = key
+}
+```
 
 #### `changed`
 

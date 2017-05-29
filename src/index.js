@@ -1,4 +1,4 @@
-import Mirror from 'react-mirror'
+import Mirror, {combineNested} from 'react-mirror'
 import invariant from 'invariant'
 import most from 'most'
 
@@ -31,8 +31,14 @@ const CollectionController = Mirror({
       getIds = collection => Object.keys(collection),
       getValue = (collection, id) => collection[id] && collection[id].value,
       getKey = (collection, id) => collection[id] && collection[id].key,
-      setValue = (collection, id, value) => Object.assign({}, collection[id], {value}),
-      setKey = (collection, id, key) => Object.assign({}, collection[id], {key}),
+      setValue = (collection, id, value) => {
+        if (!collection[id]) collection[id] = {}
+        collection[id].value = value
+      },
+      setKey = (collection, id, key) => {
+        if (!collection[id]) collection[id] = {}
+        collection[id].key = key
+      },
       changed = (previous, current) => previous !== current,
       reducer = (previous, {type, payload}) => payload,
       cloneOn = {}
@@ -40,7 +46,7 @@ const CollectionController = Mirror({
 
     const config = {empty, getIds, getValue, getKey, setValue, setKey}
 
-    Object.assign({transform: true, stateChange: true}, cloneOn)
+    Object.assign(cloneOn, {transform: true, stateChange: true}, cloneOn)
 
     invariant(target, 'target is required')
     invariant(empty, 'empty is required')
@@ -51,13 +57,27 @@ const CollectionController = Mirror({
       if (type === 'CLONE') collection = clone(collection)
     })
 
+    const cursor = target(mirror)
+    cursor.$state.forEach(evt => console.log('state', evt))
+    cursor.$props.forEach(evt => console.log('props', evt)) // no props?
+
     return most.mergeArray([
-      target(mirror).map(state => {
-        const values = state
-          .filter(state => state.id && changed(getValue(collection, state.id), state))
-          .map(state => ({
-            id: state.id,
-            value: reducer(getValue(collection, state.id), {
+      combineNested({
+        state: cursor.$state,
+        props: cursor.$props
+      }).map(stores => {
+        const ids = getIds(collection)
+        const values = stores
+          .filter(
+            ({props, state}) =>
+              props &&
+              props.id &&
+              changed(getValue(collection, props.id), state) &&
+              (ids.includes(props.id) || ids.includes(String(props.id)))
+          )
+          .map(({props, state}) => ({
+            id: props.id,
+            value: reducer(getValue(collection, props.id), {
               type: 'STATE_CHANGE',
               payload: state
             })
@@ -73,8 +93,9 @@ const CollectionController = Mirror({
       mirror.$actions
         .filter(({type}) => type === 'TRANSFORM')
         .map(({payload: transform}) => {
-          if (cloneOn.transform) collection = clone(collection, config)
-          const next = transform(collection)
+          const next = transform(
+            cloneOn.transform ? clone(collection, config) : collection
+          )
           getIds(next).forEach(id => {
             const previous = getValue(collection, id)
             const value = getValue(next, id)
