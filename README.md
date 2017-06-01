@@ -32,7 +32,7 @@ Picking the right approach requires trading-off reusability vs complexity vs req
 ```js
 import React from 'react'
 import Mirror, {handleActions, combineSimple} from 'react-mirror'
-import CollectionController from '../../index'
+import CollectionController, {newId} from '../../index'
 
 const TodoItem = Mirror({
   name: 'todo-item',
@@ -42,13 +42,14 @@ const TodoItem = Mirror({
         handleActions({
           REMOVE: () => {
             dispatch.one('COLLECTION/todos')('TRANSFORM', arr => {
-              arr.splice(this.props.id, 1)
+              const index = arr.findIndex(({id}) => id === this.props.id)
+              arr.splice(index, 1)
               return arr
             })
           },
           SHIFT: ({payload: shift}) => {
             dispatch.one('COLLECTION/todos')('TRANSFORM', arr => {
-              const index = this.props.id
+              const index = arr.findIndex(({id}) => id === this.props.id)
               arr.splice(index + shift, 0, arr.splice(index, 1)[0])
               return arr
             })
@@ -89,7 +90,7 @@ const Todos = Mirror({
         handleActions({
           ADD_TODO: ({payload: title}) => {
             dispatch.one('COLLECTION/todos')('TRANSFORM', arr => {
-              return arr.concat({value: {title, complete: false}})
+              return arr.concat({value: {title, complete: false}, id: newId()})
             })
           }
         })
@@ -137,7 +138,7 @@ const Todos = Mirror({
         if (filter === 'COMPLETE') return value.complete
         return true
       })
-      .map(({value, id}) => {
+      .map(({value, id}, i) => {
         return <TodoItem {...value} key={id} id={id} />
       })}
     <div>
