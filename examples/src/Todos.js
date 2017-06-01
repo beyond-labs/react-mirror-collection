@@ -1,6 +1,6 @@
 import React from 'react'
 import Mirror, {handleActions, combineSimple} from 'react-mirror'
-import CollectionController from '../../index'
+import CollectionController, {newId} from '../../index'
 
 const TodoItem = Mirror({
   name: 'todo-item',
@@ -10,13 +10,14 @@ const TodoItem = Mirror({
         handleActions({
           REMOVE: () => {
             dispatch.one('COLLECTION/todos')('TRANSFORM', arr => {
-              arr.splice(this.props.id, 1)
+              const index = arr.findIndex(({id}) => id === this.props.id)
+              arr.splice(index, 1)
               return arr
             })
           },
           SHIFT: ({payload: shift}) => {
             dispatch.one('COLLECTION/todos')('TRANSFORM', arr => {
-              const index = this.props.id
+              const index = arr.findIndex(({id}) => id === this.props.id)
               arr.splice(index + shift, 0, arr.splice(index, 1)[0])
               return arr
             })
@@ -26,7 +27,7 @@ const TodoItem = Mirror({
       .scan(
         handleActions(
           {
-            UPDATE: (state, {payload: value}) => ({...state, value}),
+            UPDATE: (state, {payload: title}) => ({...state, title}),
             MARK_ACTIVE: state => ({...state, complete: false}),
             MARK_COMPLETE: state => ({...state, complete: true})
           },
@@ -34,9 +35,9 @@ const TodoItem = Mirror({
         )
       )
   }
-})(({value, complete, dispatch}) => (
+})(({title, complete, dispatch}) => (
   <div>
-    <input onChange={evt => dispatch('UPDATE', evt.target.value)} value={value} />
+    <input onChange={evt => dispatch('UPDATE', evt.target.value)} value={title} />
     <input
       onChange={evt => dispatch(evt.target.checked ? 'MARK_COMPLETE' : 'MARK_ACTIVE')}
       type="checkbox"
@@ -55,9 +56,9 @@ const Todos = Mirror({
     const $state = mirror.$actions
       .tap(
         handleActions({
-          ADD_TODO: ({payload: value}) => {
+          ADD_TODO: ({payload: title}) => {
             dispatch.one('COLLECTION/todos')('TRANSFORM', arr => {
-              return arr.concat({value: {value, complete: false}})
+              return arr.concat({value: {title, complete: false}, id: newId()})
             })
           }
         })
@@ -84,7 +85,7 @@ const Todos = Mirror({
   <div>
     <CollectionController
       withName="COLLECTION/todos"
-      empty={() => []}
+      empty={[]}
       target={mirror => mirror.root().children('todo-item')}
     />
     <input
@@ -105,8 +106,8 @@ const Todos = Mirror({
         if (filter === 'COMPLETE') return value.complete
         return true
       })
-      .map(({value, key}, index) => {
-        return <TodoItem {...value} key={key} id={index} />
+      .map(({value, id}, i) => {
+        return <TodoItem {...value} key={id} id={id} />
       })}
     <div>
       <button onClick={() => dispatch('SET_FILTER', 'ALL')}>All</button>

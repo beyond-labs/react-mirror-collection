@@ -12,23 +12,27 @@ When designing Mirror-based applications you should try to localise state whenev
 
 You might struggle to achieve this with localised stores & reactive subscriptions. The obvious solution is to move all state to a higher-level contextual store & pass props down - but by doing this individual Todos will no be longer self-contained & many of Mirror's advantages are lost.
 
-Mirror Collection is a no-compromises solution to these requirements. Collections as a whole (& their entries) can be manipulated by dispatching `TRANSFORM` actions to a `CollectionController`. When collection entries are linked to stores they can also be updated via `$state` events.
+So, like... umm... Mirror Collection uses contextual stores (via the `CollectionController`), but! It makes linking collection entries to local stores easy. Collections as a whole (& their entries) can be manipulated by dispatching `TRANSFORM` actions to the `CollectionController`. When collection entries are linked to stores those entries can also be updated via `$state` events.
 
-The collection itself can be any arbitrary object, so long as it can store key-value pairs. By default `CollectionController` supports collections shapes like `[{value, key}, {value, key}]` & `{[id]: {value, key}, [id]: {value, key}}`. Other shapes require some configuration.
+Collections can be any arbitrary object, capable of storing collection entries (a value & matching id). By default `CollectionController` supports collections shapes like `[{id, value}, {id, value}]` & `{[id]: value, [id]: value}`. Other shapes require some configuration. Mirror Collection links target stores (targets are indicated with a `mirror` cursor) to entries when they receive `id` as a prop.
 
-## How it Works
+## Notes
 
-Each collection entry stores 3 pieces of information:
+Mirror Collection keeps `collection` up-to-date & nothing else. How `collection` is used is your decision, for instance you could:
 
-* `key` - Generated & set by Mirror Collection. Links entries returned by `TRANSFORM` to previous entries. Can be passed to React components (inside arrays) for reconciliation.
-* `value` - Last value emitted by scanning update actions. Update actions are dispatched whenever a linked store emits a `$state` value or a value is modified via `TRANSFORM`.
-* `id` - An implicitly-stored address for retrieving key / value pairs (eg, an array index). Links `$state` events to entries when passed as a prop (`id`) to target stores.
+* Initialize local stores by reading from the collection (via props), then only write updates (like the example)
+* Have local stores combine prop / state streams to always reflect the collection entries' latest value
+* Add a `REPLACE_STATE` action handler to local stores & dispatch `REPLACE_STATE` when the reducer is called
+* Modify the reducer to buffer actions, which are dispatched to a local store when it mounts
+
+Picking the right approach requires trading-off reusability vs complexity vs requirements (of course varying by use-case)
 
 ## Example
 
 ```js
+import React from 'react'
 import Mirror, {handleActions, combineSimple} from 'react-mirror'
-import CollectionController from 'react-mirror-collection'
+import CollectionController from '../../index'
 
 const TodoItem = Mirror({
   name: 'todo-item',
@@ -54,18 +58,17 @@ const TodoItem = Mirror({
       .scan(
         handleActions(
           {
-            UPDATE: (state, {payload: value}) => ({...state, value}),
+            UPDATE: (state, {payload: title}) => ({...state, title}),
             MARK_ACTIVE: state => ({...state, complete: false}),
             MARK_COMPLETE: state => ({...state, complete: true})
           },
-          {value: '', complete: false}
+          this.props
         )
       )
-      .startWith(this.props)
   }
-})(({value, complete, dispatch}) => (
+})(({title, complete, dispatch}) => (
   <div>
-    <input onChange={evt => dispatch('UPDATE', evt.target.value)} value={value} />
+    <input onChange={evt => dispatch('UPDATE', evt.target.value)} value={title} />
     <input
       onChange={evt => dispatch(evt.target.checked ? 'MARK_COMPLETE' : 'MARK_ACTIVE')}
       type="checkbox"
@@ -84,25 +87,27 @@ const Todos = Mirror({
     const $state = mirror.$actions
       .tap(
         handleActions({
-          ADD_TODO: ({payload: value}) => {
+          ADD_TODO: ({payload: title}) => {
             dispatch.one('COLLECTION/todos')('TRANSFORM', arr => {
-              return arr.concat({value: {value, complete: false}})
+              return arr.concat({value: {title, complete: false}})
             })
           }
         })
       )
       .scan(
-        handleActions({
-          SET_FILTER: (state, {payload: filter}) => ({...state, filter}),
-          INPUT: (state, {payload: input}) => ({...state, input})
-        }),
-        {input: '', filter: 'ALL'}
+        handleActions(
+          {
+            SET_FILTER: (state, {payload: filter}) => ({...state, filter}),
+            INPUT: (state, {payload: input}) => ({...state, input})
+          },
+          {input: '', filter: 'ALL'}
+        )
       )
 
     return combineSimple(
       $state,
       mirror.child('COLLECTION/todos').$state
-    ).map(([state, [collection]]) => ({
+    ).map(([state = {input: '', filter: 'ALL'}, [collection = []]]) => ({
       ...state,
       collection
     }))
@@ -111,8 +116,8 @@ const Todos = Mirror({
   <div>
     <CollectionController
       withName="COLLECTION/todos"
-      empty={() => []}
-      target={mirror => mirror.parent().children('todo-item').$state}
+      empty={[]}
+      target={mirror => mirror.root().children('todo-item')}
     />
     <input
       onKeyDown={evt => {
@@ -132,8 +137,8 @@ const Todos = Mirror({
         if (filter === 'COMPLETE') return value.complete
         return true
       })
-      .map(({value, key}, index) => {
-        return <TodoItem {...value} key={key} id={index} />
+      .map(({value, id}) => {
+        return <TodoItem {...value} key={id} id={id} />
       })}
     <div>
       <button onClick={() => dispatch('SET_FILTER', 'ALL')}>All</button>
@@ -150,49 +155,61 @@ Changing any of the props passed to `CollectionController` once it's mounted has
 
 #### `target`
 
-Function which accepts a `mirror` cursor & returns a state stream matching every target store.
+Function which accepts a `mirror` cursor & returns a cursor matching every target store.
+
+Example: `mirror => mirror.parent('todo-list').children('todo-item')`
 
 #### `empty`
 
-Function which returns a collection with no entries.
+Collection with no entries.
 
-#### `getIds`
+Example: `[]`
 
-Default value: `collection => Object.keys(collection)`
-
-#### `getValue`
-
-Default value: `(collection, id) => collection[id] && collection[id].value`
-
-#### `getKey`
-
-Default value: `(collection, id) => collection[id] && collection[id].key`
-
-#### `setValue`
+#### `getEntries`
 
 Default value:
 
 ```js
-(collection, id, value) => {
-  if (!collection[id]) collection[id] = {}
-  collection[id].value = value
+collection => {
+  return collection instanceof Array
+    ? collection
+    : Object.keys(collection).map(id => ({id, value: collection[id]}))
 }
 ```
 
-#### `setKey`
+#### `setEntries`
+
+Accepts 3 values: the `collection` to update, the serialized up-to-date `entries` inside that collection & the indexes of entries that were `changed` by the latest update
 
 Default value:
 
 ```js
-(collection, id, key) => {
-  if (!collection[id]) collection[id] = {}
-  collection[id].key = key
+(collection, entries, changed) => {
+  if (collection instanceof Array) return entries
+  else {
+    changed.forEach(i => (collection[entries[i].id] = entries[i].value))
+    return collection
+  }
+}
+```
+
+#### `clone`
+
+Cloning the collection during updates adds some safety (referential + against mutations) & forces pure components relying on the collection to re-render when it changes.
+
+Default value:
+
+```js
+collection => {
+  return collection instanceof Array
+    ? collection.slice()
+    : Object.assign({}, collection)
 }
 ```
 
 #### `changed`
 
-After a `TRANSFORM` action Mirror Collection checks every value for changes & then updates modified entries.
+Used to check whether a value was changed by `TRANSFORM` or `$state`. Values which have changed are passed to `reducer`.
 
 Default value: `(previous, current) => previous !== current`
 
@@ -200,17 +217,13 @@ Default value: `(previous, current) => previous !== current`
 
 Returns the "true" value of an entry whenever one is updated. `type` is either `"STATE_CHANGE"` or `"TRANSFORM"`
 
-Default value: `(previous, {type, payload}) => payload`
+Default value:
 
-#### `cloneOn`
-
-Controls collection cloning behaviour. Cloning the collection means that:
-
-* `TRANSFORM` actions won't mutate the collection
-* References to `collection` are safe
-* Pure components depending on the collection re-render when it changes
-* In extreme cases, performance could degrade
-
-Default value: `{transform: true, stateChange: true}`
-
-Note: you can dispatch `CLONE` to manually trigger collection cloning.
+```js
+(previous, {type, payload}) => {
+  if (payload === undefined) return previous
+  payload = Object.assign({}, payload)
+  delete payload.id
+  return payload
+}
+```
