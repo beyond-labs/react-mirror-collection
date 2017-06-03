@@ -12,9 +12,9 @@ When designing Mirror-based applications you should try to localise state whenev
 
 You might struggle to achieve this with localised stores & reactive subscriptions. The obvious solution is to move all state to a higher-level contextual store & pass props down - but by doing this individual Todos will no be longer self-contained & many of Mirror's advantages are lost.
 
-So, like... umm... Mirror Collection uses contextual stores (via the `CollectionController`), but! It makes linking collection entries to local stores easy. Collections as a whole (& their entries) can be manipulated by dispatching `TRANSFORM` actions to the `CollectionController`. When collection entries are linked to stores those entries can also be updated via `$state` events.
+So, like... umm... Mirror Collection uses contextual stores (via the `CollectionModel`), but! It makes linking collection entries to local stores easy. Collections as a whole (& their entries) can be manipulated by dispatching `TRANSFORM` actions to the `CollectionModel`. When collection entries are linked to stores those entries can also be updated via `$state` events.
 
-Collections can be any arbitrary object, capable of storing collection entries (a value & matching id). By default `CollectionController` supports collections shapes like `[{id, value}, {id, value}]` & `{[id]: value, [id]: value}`. Other shapes require some configuration. Mirror Collection links target stores (targets are indicated with a `mirror` cursor) to entries when they receive `id` as a prop.
+Collections can be any arbitrary object, capable of storing collection entries (a value & matching id). By default `CollectionModel` supports collections shapes like `[{id, value}, {id, value}]` & `{[id]: value, [id]: value}`. Other shapes require some configuration. Mirror Collection links target stores (targets are indicated with a `mirror` cursor) to entries when they receive `id` as a prop.
 
 ## Notes
 
@@ -32,7 +32,7 @@ Picking the right approach requires trading-off reusability vs complexity vs req
 ```js
 import React from 'react'
 import Mirror, {handleActions, combineSimple} from 'react-mirror'
-import CollectionController, {newId} from '../../index'
+import CollectionModel, {newId} from '../../index'
 
 const TodoItem = Mirror({
   name: 'todo-item',
@@ -115,7 +115,7 @@ const Todos = Mirror({
   }
 })(({collection, filter, input, dispatch}) => (
   <div>
-    <CollectionController
+    <CollectionModel
       withName="COLLECTION/todos"
       empty={[]}
       target={mirror => mirror.root().children('todo-item')}
@@ -152,7 +152,7 @@ const Todos = Mirror({
 
 ## Props
 
-Changing any of the props passed to `CollectionController` once it's mounted has no effect.
+Changing any of the props passed to `CollectionModel` once it's mounted has no effect.
 
 #### `target`
 
@@ -212,7 +212,15 @@ collection => {
 
 Used to check whether a value was changed by `TRANSFORM` or `$state`. Values which have changed are passed to `reducer`.
 
-Default value: `(previous, current) => previous !== current`
+Default value:
+
+```js
+(previous, next) => {
+  next = Object.assign({}, next)
+  delete next.id
+  return !shallowEqual(previous, next)
+}
+```
 
 #### `reducer`
 
@@ -222,7 +230,6 @@ Default value:
 
 ```js
 (previous, {type, payload}) => {
-  if (payload === undefined) return previous
   payload = Object.assign({}, payload)
   delete payload.id
   return payload

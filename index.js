@@ -4,7 +4,8 @@ Object.defineProperty(exports, '__esModule', { value: true });
 
 function _interopDefault (ex) { return (ex && (typeof ex === 'object') && 'default' in ex) ? ex['default'] : ex; }
 
-var Mirror = _interopDefault(require('react-mirror'));
+var Mirror = require('react-mirror');
+var Mirror__default = _interopDefault(Mirror);
 var invariant = _interopDefault(require('invariant'));
 var most = _interopDefault(require('most'));
 
@@ -15,9 +16,11 @@ var newId = function newId() {
   return counter.toString(36);
 };
 
-var CollectionController = Mirror({
+var CollectionModel = Mirror__default({
   name: 'COLLECTION',
   state: function state(mirror) {
+    var _this = this;
+
     var _props = this.props,
         target = _props.target,
         empty = _props.empty,
@@ -29,19 +32,22 @@ var CollectionController = Mirror({
     } : _props$getEntries,
         _props$setEntries = _props.setEntries,
         setEntries = _props$setEntries === undefined ? function (collection, entries, changed) {
-      if (collection instanceof Array) return entries;
-      changed.forEach(function (i) {
-        return collection[entries[i].id] = entries[i].value;
-      });
-      return collection;
+      if (collection instanceof Array) return entries;else {
+        changed.forEach(function (i) {
+          return collection[entries[i].id] = entries[i].value;
+        });
+        return collection;
+      }
     } : _props$setEntries,
         _props$clone = _props.clone,
         clone = _props$clone === undefined ? function (collection) {
       return collection instanceof Array ? collection.slice() : Object.assign({}, collection);
     } : _props$clone,
         _props$changed = _props.changed,
-        changed = _props$changed === undefined ? function (previous, current) {
-      return previous !== current;
+        changed = _props$changed === undefined ? function (previous, next) {
+      next = Object.assign({}, next);
+      delete next.id;
+      return !Mirror.shallowEqual(previous, next);
     } : _props$changed,
         _props$reducer = _props.reducer,
         reducer = _props$reducer === undefined ? function (previous, _ref) {
@@ -51,35 +57,26 @@ var CollectionController = Mirror({
       payload = Object.assign({}, payload);
       delete payload.id;
       return payload;
-    } : _props$reducer,
-        _props$cloneOn = _props.cloneOn,
-        cloneOn = _props$cloneOn === undefined ? {} : _props$cloneOn;
+    } : _props$reducer;
 
-
-    Object.assign(cloneOn, { transform: true, stateChange: true }, cloneOn);
 
     invariant(target, 'target is required');
     invariant(empty, 'empty is required');
 
     var collection = clone(empty);
 
-    mirror.$actions.forEach(function (_ref2) {
-      var type = _ref2.type;
-
-      if (type === 'CLONE') collection = clone(collection);
-    });
-
-    return most.mergeArray([target(mirror).$state.map(function (stores) {
+    return most.merge(target(mirror).$state.map(function (stores) {
       var storeEntries = {};
       stores.forEach(function (state) {
         return state.id && (storeEntries[state.id] = state);
       });
       var changedIndexes = [];
-      var nextEntries = getEntries(collection).map(function (_ref3, i) {
-        var id = _ref3.id,
-            value = _ref3.value;
+      var previousEntries = getEntries(collection);
+      var nextEntries = previousEntries.map(function (_ref2, i) {
+        var id = _ref2.id,
+            value = _ref2.value;
 
-        if (changed(value, storeEntries[i])) {
+        if (changed(value, storeEntries[id]) && storeEntries[id] !== undefined) {
           changedIndexes.push(i);
           value = reducer(value, {
             type: 'STATE_CHANGE',
@@ -88,14 +85,19 @@ var CollectionController = Mirror({
         }
         return { id: id, value: value };
       });
-      if (cloneOn.stateChange) collection = clone(collection);
-      collection = setEntries(collection, nextEntries, changedIndexes);
-      return collection;
-    }), mirror.$actions.filter(function (_ref4) {
-      var type = _ref4.type;
-      return type === 'CLONE';
-    }).map(function () {
+      Object.assign(_this, {
+        changedIndexes: changedIndexes,
+        previousIds: previousEntries.map(function (_ref3) {
+          var id = _ref3.id;
+          return id;
+        }),
+        nextIds: nextEntries.map(function (_ref4) {
+          var id = _ref4.id;
+          return id;
+        })
+      });
       collection = clone(collection);
+      collection = setEntries(collection, nextEntries, changedIndexes);
       return collection;
     }), mirror.$actions.filter(function (_ref5) {
       var type = _ref5.type;
@@ -103,36 +105,53 @@ var CollectionController = Mirror({
     }).map(function (_ref6) {
       var transform = _ref6.payload;
 
-      if (cloneOn.transform) collection = clone(collection);
-      var previousEntries = {};
-      getEntries(collection).forEach(function (_ref7) {
-        var id = _ref7.id,
-            value = _ref7.value;
-        return previousEntries[id] = value;
+      collection = clone(collection);
+      var previousEntries = getEntries(collection);
+      var previousIds = previousEntries.map(function (_ref7) {
+        var id = _ref7.id;
+        return id;
+      });
+      var previousEntriesMap = {};
+      previousEntries.forEach(function (_ref8) {
+        var id = _ref8.id,
+            value = _ref8.value;
+        return previousEntriesMap[id] = value;
       });
       var nextCollection = transform(collection);
       var changedIndexes = [];
-      var nextEntries = getEntries(nextCollection).map(function (_ref8, i) {
-        var id = _ref8.id,
-            value = _ref8.value;
+      var nextEntries = getEntries(nextCollection).map(function (_ref9, i) {
+        var id = _ref9.id,
+            value = _ref9.value;
 
-        if (changed(previousEntries[id] && previousEntries[id], value)) {
+        if (changed(previousEntriesMap[id] && previousEntriesMap[id], value)) {
           changedIndexes.push(i);
-          value = reducer(previousEntries[id], {
+          value = reducer(previousEntriesMap[id], {
             type: 'TRANSFORM',
             payload: value
           });
         }
         return { id: id, value: value };
       });
+      Object.assign(_this, {
+        changedIndexes: changedIndexes,
+        previousIds: previousIds,
+        nextIds: nextEntries.map(function (_ref10) {
+          var id = _ref10.id;
+          return id;
+        })
+      });
       collection = setEntries(nextCollection, nextEntries, changedIndexes);
       return collection;
-    })]);
+    }));
   },
 
-  pure: { state: false }
+  pure: {
+    stateEqual: function stateEqual(prev, next) {
+      return prev !== undefined && !this.changedIndexes.length && Mirror.shallowEqual(this.previousIds, this.nextIds);
+    }
+  }
 })();
 
 exports.newId = newId;
-exports['default'] = CollectionController;
+exports['default'] = CollectionModel;
 //# sourceMappingURL=index.js.map

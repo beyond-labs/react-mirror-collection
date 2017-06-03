@@ -1,4 +1,4 @@
-import Mirror from 'react-mirror'
+import Mirror, {shallowEqual} from 'react-mirror'
 import invariant from 'invariant'
 import most from 'most'
 
@@ -9,7 +9,7 @@ const newId = () => {
   return counter.toString(36)
 }
 
-const CollectionController = Mirror({
+const CollectionModel = Mirror({
   name: 'COLLECTION',
   state(mirror) {
     const {
@@ -32,9 +32,12 @@ const CollectionController = Mirror({
           ? collection.slice()
           : Object.assign({}, collection)
       },
-      changed = (previous, current) => previous !== current,
+      changed = (previous, next) => {
+        next = Object.assign({}, next)
+        delete next.id
+        return !shallowEqual(previous, next)
+      },
       reducer = (previous, {type, payload}) => {
-        if (payload === undefined) return previous
         payload = Object.assign({}, payload)
         delete payload.id
         return payload
@@ -51,8 +54,9 @@ const CollectionController = Mirror({
         const storeEntries = {}
         stores.forEach(state => state.id && (storeEntries[state.id] = state))
         const changedIndexes = []
-        const nextEntries = getEntries(collection).map(({id, value}, i) => {
-          if (changed(value, storeEntries[i])) {
+        const previousEntries = getEntries(collection)
+        const nextEntries = previousEntries.map(({id, value}, i) => {
+          if (changed(value, storeEntries[id]) && storeEntries[id] !== undefined) {
             changedIndexes.push(i)
             value = reducer(value, {
               type: 'STATE_CHANGE',
@@ -60,6 +64,11 @@ const CollectionController = Mirror({
             })
           }
           return {id, value}
+        })
+        Object.assign(this, {
+          changedIndexes,
+          previousIds: previousEntries.map(({id}) => id),
+          nextIds: nextEntries.map(({id}) => id)
         })
         collection = clone(collection)
         collection = setEntries(collection, nextEntries, changedIndexes)
@@ -69,27 +78,42 @@ const CollectionController = Mirror({
         .filter(({type}) => type === 'TRANSFORM')
         .map(({payload: transform}) => {
           collection = clone(collection)
-          const previousEntries = {}
-          getEntries(collection).forEach(({id, value}) => (previousEntries[id] = value))
+          const previousEntries = getEntries(collection)
+          const previousIds = previousEntries.map(({id}) => id)
+          const previousEntriesMap = {}
+          previousEntries.forEach(({id, value}) => (previousEntriesMap[id] = value))
           const nextCollection = transform(collection)
           const changedIndexes = []
           const nextEntries = getEntries(nextCollection).map(({id, value}, i) => {
-            if (changed(previousEntries[id] && previousEntries[id], value)) {
+            if (changed(previousEntriesMap[id] && previousEntriesMap[id], value)) {
               changedIndexes.push(i)
-              value = reducer(previousEntries[id], {
+              value = reducer(previousEntriesMap[id], {
                 type: 'TRANSFORM',
                 payload: value
               })
             }
             return {id, value}
           })
+          Object.assign(this, {
+            changedIndexes,
+            previousIds,
+            nextIds: nextEntries.map(({id}) => id)
+          })
           collection = setEntries(nextCollection, nextEntries, changedIndexes)
           return collection
         })
     )
   },
-  pure: {state: false}
+  pure: {
+    stateEqual(prev, next) {
+      return (
+        prev !== undefined &&
+        !this.changedIndexes.length &&
+        shallowEqual(this.previousIds, this.nextIds)
+      )
+    }
+  }
 })()
 
 export {newId}
-export default CollectionController
+export default CollectionModel
