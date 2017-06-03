@@ -1,5 +1,8 @@
 import React from 'react'
 import {storiesOf} from '@storybook/react'
-import Todos from './Todos'
+import TodosDefault from './TodosDefault'
+import TodosMVC from './TodosMVC'
 
-storiesOf('Todos', module).add('default', () => <Todos />)
+storiesOf('Todos', module)
+  .add('default', () => <TodosDefault />)
+  .add('Todos MVC', () => <TodosMVC />)

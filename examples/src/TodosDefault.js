@@ -1,6 +1,6 @@
 import React from 'react'
 import Mirror, {handleActions, combineSimple} from 'react-mirror'
-import CollectionController, {newId} from '../../index'
+import CollectionModel, {newId} from '../../index'
 
 const TodoItem = Mirror({
   name: 'todo-item',
@@ -83,7 +83,7 @@ const Todos = Mirror({
   }
 })(({collection, filter, input, dispatch}) => (
   <div>
-    <CollectionController
+    <CollectionModel
       withName="COLLECTION/todos"
       empty={[]}
       target={mirror => mirror.root().children('todo-item')}
