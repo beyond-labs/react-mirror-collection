@@ -1,7 +1,7 @@
 import './style/todos.scss'
 import React from 'react'
 import cl from 'classnames'
-import Mirror, {handleActions, combineSimple} from 'react-mirror'
+import Mirror, {handleActions, combine} from 'react-mirror'
 import CollectionModel, {newId} from '../../index'
 import Input, {actions as actions_input} from './Input'
 
@@ -33,7 +33,7 @@ const ENTER = 13
 const TodoModel = Mirror({
   name: 'todos-model',
   state(mirror, dispatch) {
-    return combineSimple(
+    return combine(
       mirror
         .child('COLLECTION')
         .$state.map(([collection = []]) => {
@@ -88,7 +88,9 @@ const TodoModel = Mirror({
         )
     ).map(([todos, state]) => ({todos, ...state}))
   }
-})(() => <CollectionModel empty={[]} target={mirror => mirror.all('todos-item')} />)
+})(function TodoModel() {
+  return <CollectionModel empty={[]} target={mirror => mirror.all('todos-item')} />
+})
 
 const TodosItem = Mirror({
   name: 'todos-item',
@@ -111,92 +113,101 @@ const TodosItem = Mirror({
       )
     )
   }
-})(({complete = false, editing = false, title = '', id, dispatch}) => (
-  <li
-    className={cl({complete, editing})}
-    onDoubleClick={() => dispatch(actions.START_EDITING)}
-  >
-    <div className="view">
+})(function TodosItem({complete = false, editing = false, title = '', id, dispatch}) {
+  return (
+    <li
+      className={cl({complete, editing})}
+      onDoubleClick={() => dispatch(actions.START_EDITING)}
+    >
+      <div className="view">
+        <Input
+          withName="todos-item/complete-toggle"
+          className="toggle"
+          type="checkbox"
+          onChange={e => {
+            const action = e.target.checked ? actions.MARK_COMPLETE : actions.MARK_ACTIVE
+            dispatch(action)
+          }}
+          checked={complete}
+        />
+        <label>
+          {title}
+        </label>
+        <button
+          className="destroy"
+          onClick={() => {
+            dispatch.parent('todos').child('todos-model')(actions.REMOVE_TODO, id)
+          }}
+        />
+      </div>
       <Input
-        withName="todos-item/complete-toggle"
-        className="toggle"
-        type="checkbox"
-        onChange={e => {
-          const action = e.target.checked ? actions.MARK_COMPLETE : actions.MARK_ACTIVE
-          dispatch(action)
+        withName="todos-item/title-input"
+        className="edit"
+        onBlur={() => dispatch(actions.STOP_EDITING)}
+        onKeyDown={e => {
+          if (e.keyCode === ENTER) dispatch(actions.STOP_EDITING)
         }}
-        checked={complete}
-      />
-      <label>
-        {title}
-      </label>
-      <button
-        className="destroy"
-        onClick={() => {
-          dispatch.parent('todos').child('todos-model')(actions.REMOVE_TODO, id)
+        onChange={evt => {
+          dispatch(actions.UPDATE_TITLE, evt.target.value || '')
         }}
+        value={title}
       />
-    </div>
-    <Input
-      withName="todos-item/title-input"
-      className="edit"
-      onBlur={() => dispatch(actions.STOP_EDITING)}
-      onKeyDown={e => {
-        if (e.keyCode === ENTER) dispatch(actions.STOP_EDITING)
-      }}
-      onChange={evt => {
-        dispatch(actions.UPDATE_TITLE, evt.target.value || '')
-      }}
-      value={title}
-    />
-  </li>
-))
+    </li>
+  )
+})
 
 const TodosList = Mirror({
   name: 'todos-list',
   state(mirror) {
     return mirror.parent('todos').child('todos-model').$state.map(([state]) => state)
   }
-})(({todos, filter, dispatch}) => (
-  <section className="main" style={todos.length ? undefined : {display: 'none'}}>
-    <Input
-      className="toggle-all"
-      type="checkbox"
-      onChange={e => {
-        const action = e.target.checked ? actions.MARK_COMPLETE : actions.MARK_ACTIVE
-        dispatch.children('todos-item')(action)
-      }}
-      checked={todos.every(todo => todo.complete)}
-    />
-    <label htmlFor="toggle-all">Mark all as complete</label>
-    <ul className="todo-list">
-      {todos
-        .filter(({complete}) => {
-          if (filter === 'ALL') return true
-          if (filter === 'ACTIVE') return !complete
-          if (filter === 'COMPLETE') return complete
-          return true
-        })
-        .map(todo => <TodosItem key={todo.id} {...todo} />)}
-    </ul>
-  </section>
-))
+})(function TodosList({todos, filter, dispatch}) {
+  return (
+    <section className="main" style={todos.length ? undefined : {display: 'none'}}>
+      <Input
+        className="toggle-all"
+        type="checkbox"
+        onChange={e => {
+          const action = e.target.checked ? actions.MARK_COMPLETE : actions.MARK_ACTIVE
+          dispatch.children('todos-item')(action)
+        }}
+        checked={todos.every(todo => todo.complete)}
+      />
+      <label htmlFor="toggle-all">Mark all as complete</label>
+      <ul className="todo-list">
+        {todos
+          .filter(({complete}) => {
+            if (filter === 'ALL') return true
+            if (filter === 'ACTIVE') return !complete
+            if (filter === 'COMPLETE') return complete
+            return true
+          })
+          .map(todo => <TodosItem key={todo.id} {...todo} />)}
+      </ul>
+    </section>
+  )
+})
 
-const Header = Mirror()(({dispatch}) => (
-  <header className="header">
-    <h1>todos</h1>
-    <Input
-      className="new-todo"
-      onKeyDown={e => {
-        if (e.keyCode === ENTER && e.target.value) {
-          dispatch.parent('todos').child('todos-model')(actions.ADD_TODO, e.target.value)
-          dispatch.child('input')(actions_input.UPDATE_VALUE, '')
-        }
-      }}
-      placeholder="What needs to be done?"
-    />
-  </header>
-))
+const Header = Mirror()(function Header({dispatch}) {
+  return (
+    <header className="header">
+      <h1>todos</h1>
+      <Input
+        className="new-todo"
+        onKeyDown={e => {
+          if (e.keyCode === ENTER && e.target.value) {
+            dispatch.parent('todos').child('todos-model')(
+              actions.ADD_TODO,
+              e.target.value
+            )
+            dispatch.child('input')(actions_input.UPDATE_VALUE, '')
+          }
+        }}
+        placeholder="What needs to be done?"
+      />
+    </header>
+  )
+})
 
 const Footer = Mirror({
   state(mirror) {
@@ -209,7 +220,7 @@ const Footer = Mirror({
         filter: state.filter
       }))
   }
-})(({todosCount, activeTodosCount, filter, dispatch}) => {
+})(function Footer({todosCount, activeTodosCount, filter, dispatch}) {
   dispatch = dispatch.parent('todos').child('todos-model')
 
   return (
@@ -258,16 +269,18 @@ const Footer = Mirror({
   )
 })
 
-const Todos = Mirror({name: 'todos'})(() => (
-  <div className="todoContainer">
-    <div className="background" />
-    <section className="todoapp">
-      <Header />
-      <TodosList />
-      <Footer />
-      <TodoModel />
-    </section>
-  </div>
-))
+const Todos = Mirror({name: 'todos'})(function Todos() {
+  return (
+    <div className="todoContainer">
+      <div className="background" />
+      <section className="todoapp">
+        <Header />
+        <TodosList />
+        <Footer />
+        <TodoModel />
+      </section>
+    </div>
+  )
+})
 
 export default Todos

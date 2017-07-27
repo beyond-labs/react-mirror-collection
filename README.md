@@ -31,7 +31,7 @@ Picking the right approach requires trading-off reusability vs complexity vs req
 
 ```js
 import React from 'react'
-import Mirror, {handleActions, combineSimple} from 'react-mirror'
+import Mirror, {handleActions, combine} from 'react-mirror'
 import CollectionModel, {newId} from '../../index'
 
 const TodoItem = Mirror({
@@ -105,7 +105,7 @@ const Todos = Mirror({
         )
       )
 
-    return combineSimple(
+    return combine(
       $state,
       mirror.child('COLLECTION/todos').$state
     ).map(([state = {input: '', filter: 'ALL'}, [collection = []]]) => ({

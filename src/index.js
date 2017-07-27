@@ -1,6 +1,6 @@
 import Mirror, {shallowEqual} from 'react-mirror'
 import invariant from 'invariant'
-import most from 'most'
+import * as most from 'most'
 
 let counter = 0
 

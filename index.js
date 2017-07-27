@@ -7,7 +7,7 @@ function _interopDefault (ex) { return (ex && (typeof ex === 'object') && 'defau
 var Mirror = require('react-mirror');
 var Mirror__default = _interopDefault(Mirror);
 var invariant = _interopDefault(require('invariant'));
-var most = _interopDefault(require('most'));
+var most = require('most');
 
 var counter = 0;
 

@@ -24,7 +24,7 @@
   "dependencies": {
     "invariant": "^2.2.2",
     "most": "^1.4.0",
-    "react-mirror": "^1.1.1"
+    "react-mirror": "^2.0.0-rc.1"
   },
   "devDependencies": {
     "babel-eslint": "7.2.3",
